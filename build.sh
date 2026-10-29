@@ -50,8 +50,10 @@ clean_luajit() {
   make -C "${LUAJIT_SRC}" clean TARGET_SYS=Windows >/dev/null 2>&1 || true
   rm -f "${LUAJIT_SRC}"/*.o "${LUAJIT_SRC}"/*.obj "${LUAJIT_SRC}"/*.dll \
         "${LUAJIT_SRC}"/*.exe "${LUAJIT_SRC}"/*.lib "${LUAJIT_SRC}"/*.exp \
-        "${LUAJIT_SRC}"/host/*.o "${LUAJIT_SRC}"/host/minilua* \
-        "${LUAJIT_SRC}"/host/buildvm*
+        "${LUAJIT_SRC}"/host/*.o \
+        "${LUAJIT_SRC}"/host/minilua "${LUAJIT_SRC}"/host/minilua.exe \
+        "${LUAJIT_SRC}"/host/buildvm "${LUAJIT_SRC}"/host/buildvm.exe \
+        "${LUAJIT_SRC}"/host/buildvm_arch.h
 }
 
 if [[ "${DO_CLEAN_ONLY}" -eq 1 ]]; then
