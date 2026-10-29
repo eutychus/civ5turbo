@@ -141,7 +141,7 @@ reviews:
       instructions: |
         Check GitHub Actions security and reliability: least-privilege `permissions`, no untrusted
         event input interpolated into `run:` blocks, pinned action major versions, artifact paths
-        that exist, and release steps gated to version tags.
+        that exist, and release steps gated to pushes to main or version tags.
 
   tools:
     actionlint:
