@@ -25,15 +25,42 @@ reviews:
       - "WIP"
       - "DO NOT MERGE"
 
+  # Review scope: first-party code only.
+  #
+  # A positive pattern restricts review to files matching an include, so the
+  # vendored LuaJIT 2.1 tree is deliberately absent from this allowlist. Only
+  # the seven Civilization V integration files inside luajit/ are included.
+  # Do not add "!luajit/**" here: CodeRabbit exclusions win regardless of
+  # order and would also exclude the integration files below.
   path_filters:
+    # First-party project files
+    - "README.md"
+    - "LICENSE"
+    - "build.sh"
+    - "build_all.bat"
+    - "install_playtest.ps1"
+    - "summarize_profile.ps1"
+    - ".gitignore"
+    - ".gitattributes"
+    - ".coderabbit.yaml"
+    - "benchmark/**"
+    - ".github/**"
+
+    # Civilization V integration code (the only first-party files in luajit/)
+    - "luajit/src/lj_civ5_accel.c"
+    - "luajit/src/lj_civ5_accel.h"
+    - "luajit/src/lj_api.c"
+    - "luajit/src/lj_load.c"
+    - "luajit/src/lj_state.c"
+    - "luajit/src/ljamalg.c"
+    - "luajit/src/Makefile"
+
+    # Generated/build outputs (defensive; CodeRabbit also ignores these by default)
     - "!dist/**"
     - "!**/*.exe"
     - "!**/*.dll"
     - "!**/*.o"
     - "!**/*.obj"
-    - "!luajit/doc/**"
-    - "!luajit/dynasm/**"
-    - "!luajit/etc/**"
 
   path_instructions:
     - path: "luajit/src/lj_civ5_accel.c"
@@ -54,24 +81,36 @@ reviews:
 
     - path: "luajit/src/lj_api.c"
       instructions: |
-        Patched LuaJIT core file. Keep changes minimal and upstream-compatible. Verify that host
-        closure interception cannot recurse and that stack/error paths stay balanced.
+        Patched upstream LuaJIT core file. Review only the Civilization V integration changes and
+        their interaction with existing code; do not flag pre-existing upstream LuaJIT style,
+        naming, portability, or architecture. Keep changes minimal and upstream-compatible. Verify
+        that host closure interception cannot recurse and that stack/error paths stay balanced.
 
     - path: "luajit/src/lj_load.c"
       instructions: |
-        Patched LuaJIT core file. Verify the loadbuffer hook anchors cached `GCproto*` objects in
-        the registry, handles cache misses and errors correctly, and never returns a closure bound
-        to the wrong thread environment.
+        Patched upstream LuaJIT core file. Review only the Civilization V integration changes; do
+        not flag pre-existing upstream LuaJIT style, naming, portability, or architecture. Verify
+        the loadbuffer hook anchors cached `GCproto*` objects in the registry, handles cache misses
+        and errors correctly, and never returns a closure bound to the wrong thread environment.
 
     - path: "luajit/src/lj_state.c"
       instructions: |
-        Patched LuaJIT core file. Verify allocator redirection still honors allocation failure
-        (`NULL` return), does not leak the host allocator userdata, and flushes caches on close.
+        Patched upstream LuaJIT core file. Review only the Civilization V integration changes; do
+        not flag pre-existing upstream LuaJIT style, naming, portability, or architecture. Verify
+        allocator redirection still honors allocation failure (`NULL` return), does not leak the
+        host allocator userdata, and flushes caches on close.
 
     - path: "luajit/src/ljamalg.c"
       instructions: |
-        Amalgamated LuaJIT build unit. Ensure every custom source file is included exactly once and
-        that include order still yields the expected internal definitions.
+        Patched upstream LuaJIT build unit. Review only the Civilization V integration additions.
+        Ensure every custom source file is included exactly once and that include order still
+        yields the expected internal definitions.
+
+    - path: "luajit/src/Makefile"
+      instructions: |
+        Patched upstream LuaJIT build file. Review only the Civilization V integration rules
+        (accelerator object, amalgamation, and Win32 cross-compile flags); do not flag pre-existing
+        upstream LuaJIT build conventions. Preserve the 32-bit Windows target and required exports.
 
     - path: "benchmark/**/*.c"
       instructions: |

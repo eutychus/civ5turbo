@@ -215,7 +215,7 @@ This repository includes [`.github/workflows/build-release.yml`](.github/workflo
   - `ubuntu-latest` installs `gcc-multilib` and `gcc-mingw-w64-i686`, runs `./build.sh --amalg --package`, and verifies the PE export table.
   - `windows-latest` runs `build_all.bat` with MSVC x86 and generates SHA-256 checksums.
 - **On pushing a version tag (`v*`, e.g. `git tag v1.0.0 && git push origin v1.0.0`)**: Automatically creates a GitHub Release with generated release notes and attaches `civ5turbo-win32.zip`, `lua51_Win32.dll`, `SHA256SUMS.txt`, and the MSVC-built bundle.
-- **Pull request review**: [CodeRabbit](https://www.coderabbit.ai/) reviews every non-draft PR using [`.coderabbit.yaml`](.coderabbit.yaml). The config excludes generated binaries and upstream LuaJIT documentation, and adds path-specific guidance for the LuaJIT core patches, benchmark harness, build/install scripts, and workflows.
+- **Pull request review**: [CodeRabbit](https://www.coderabbit.ai/) reviews every non-draft PR using [`.coderabbit.yaml`](.coderabbit.yaml). Review scope is an explicit first-party allowlist: vendored LuaJIT source, docs, dynasm, and host tools are excluded, while only the seven Civ 5 integration files inside `luajit/` are eligible. The config also adds path-specific guidance for those patches, the benchmark harness, build/install scripts, and workflows.
 
 > **Maintainers:** CodeRabbit reviews start after the [CodeRabbit GitHub App](https://github.com/apps/coderabbitai/installations/new) is installed on the repository. The YAML config alone does not install the app.
 
