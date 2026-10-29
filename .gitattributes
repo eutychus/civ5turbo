@@ -1,0 +1,18 @@
+* text=auto
+*.sh text eol=lf
+Makefile* text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.dll binary
+*.exe binary
+
+# LuaJIT is vendored upstream code; exclude it from language statistics, but
+# keep the Civilization V integration patches counted as first-party source.
+luajit/** linguist-vendored
+luajit/src/lj_civ5_accel.c -linguist-vendored
+luajit/src/lj_civ5_accel.h -linguist-vendored
+luajit/src/lj_api.c -linguist-vendored
+luajit/src/lj_load.c -linguist-vendored
+luajit/src/lj_state.c -linguist-vendored
+luajit/src/ljamalg.c -linguist-vendored
+luajit/src/Makefile -linguist-vendored

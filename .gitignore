@@ -1,0 +1,47 @@
+# Build intermediates
+*.o
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.manifest
+luajit/src/lua51.dll
+luajit/src/luajit.exe
+luajit/src/minilua
+luajit/src/minilua.exe
+luajit/src/buildvm
+luajit/src/buildvm.exe
+luajit/src/host/minilua
+luajit/src/host/minilua.exe
+luajit/src/host/buildvm
+luajit/src/host/buildvm.exe
+luajit/src/host/buildvm_arch.h
+luajit/src/lj_bcdef.h
+luajit/src/lj_ffdef.h
+luajit/src/lj_libdef.h
+luajit/src/lj_recdef.h
+luajit/src/lj_folddef.h
+luajit/src/host/buildvm_arch.h
+luajit/src/jit/vmdef.lua
+luajit/src/luajit_relver.txt
+
+# Build outputs (produced by build.sh / build_all.bat and CI)
+/dist/
+/benchmark/*.exe
+
+# Local profiling logs & temporary backup DLLs
+profile_run*/
+*.tsv
+*.csv
+dist/lua51_Win32_vanilla.dll
+dist/*.zip
+dist/SHA256SUMS.txt
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

@@ -1,0 +1,139 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege by default. The release job opts into contents: write.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  linux-mingw:
+    name: Linux MinGW-w64 (Win32)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install 32-bit host and MinGW-w64 cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            gcc-mingw-w64-i686 \
+            binutils-mingw-w64-i686 \
+            zip
+
+      - name: Build lua51_Win32.dll and package release bundle
+        run: |
+          chmod +x ./build.sh
+          ./build.sh --amalg --package
+
+      - name: Verify PE exports
+        run: |
+          set -euo pipefail
+          i686-w64-mingw32-objdump -p dist/lua51_Win32.dll > exports.txt
+          for sym in luaL_newstate lua_newstate lua_pcall lua_setlevel luaL_loadbuffer luaJIT_profile_start; do
+            if ! grep -q "$sym" exports.txt; then
+              echo "::error::Missing required export: $sym"
+              exit 1
+            fi
+          done
+          echo "All required Lua 5.1.4 / LuaJIT exports are present."
+
+      - name: Upload Linux cross-build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: civ5turbo-linux-mingw
+          if-no-files-found: error
+          path: |
+            dist/lua51_Win32.dll
+            dist/civ5_bench_harness.exe
+            dist/SHA256SUMS.txt
+            dist/civ5turbo-win32.zip
+
+  windows-msvc:
+    name: Windows MSVC (x86)
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build with MSVC
+        shell: cmd
+        run: build_all.bat
+
+      - name: Verify outputs and generate checksums
+        shell: pwsh
+        run: |
+          $required = @("dist/lua51_Win32.dll", "dist/civ5_bench_harness.exe")
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Missing build output: $file" }
+            if ((Get-Item $file).Length -lt 50000) { throw "Suspiciously small build output: $file" }
+          }
+          $lines = foreach ($file in $required) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            "$hash  $(Split-Path $file -Leaf)"
+          }
+          Set-Content -Path "dist/SHA256SUMS.txt" -Value $lines -Encoding ascii
+          Get-Content "dist/SHA256SUMS.txt"
+
+      - name: Upload Windows MSVC artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: civ5turbo-windows-msvc
+          if-no-files-found: error
+          path: |
+            dist/lua51_Win32.dll
+            dist/civ5_bench_harness.exe
+            dist/SHA256SUMS.txt
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ linux-mingw, windows-msvc ]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Package Windows MSVC build
+        run: |
+          cd artifacts/civ5turbo-windows-msvc
+          zip -r -9 ../../civ5turbo-win32-msvc.zip .
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/civ5turbo-linux-mingw/civ5turbo-win32.zip
+            artifacts/civ5turbo-linux-mingw/lua51_Win32.dll
+            artifacts/civ5turbo-linux-mingw/SHA256SUMS.txt
+            civ5turbo-win32-msvc.zip
