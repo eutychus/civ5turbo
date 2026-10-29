@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration for civ5turbo.
+# Install the CodeRabbit GitHub App on this repository to enable reviews:
+# https://github.com/apps/coderabbitai/installations/new
+
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+
+  path_filters:
+    - "!dist/**"
+    - "!**/*.exe"
+    - "!**/*.dll"
+    - "!**/*.o"
+    - "!**/*.obj"
+    - "!luajit/doc/**"
+    - "!luajit/dynasm/**"
+    - "!luajit/etc/**"
+
+  path_instructions:
+    - path: "luajit/src/lj_civ5_accel.c"
+      instructions: |
+        This file is compiled as LuaJIT core code (`#define LUA_CORE`). Review carefully for:
+        - LuaJIT GC correctness: use `lj_gc_anybarriert` / write barriers whenever a GC object
+          stored in a table is replaced, and never leave a newly allocated object unrooted across
+          an allocation that can trigger GC.
+        - `GCtab` / `TValue` pointer stability: `lj_tab_resize`, `lj_tab_new_ah`, or any allocation
+          may invalidate `tvref(t->array)` and node pointers. Re-fetch after allocating.
+        - Stack discipline: balance the Lua stack on every return path, including error paths.
+        - ABI compatibility: this DLL must expose the exact Lua 5.1.4 + LuaJIT public ABI expected
+          by Civilization V. Do not change exported signatures.
+        - Determinism: native replacements for map-generation functions must preserve the exact
+          `Map.Rand` call order and result. Flag any reordering or short-circuiting of RNG calls.
+        - Avoid public Lua C API calls in hot paths; operate on internals only when the invariants
+          above hold.
+
+    - path: "luajit/src/lj_api.c"
+      instructions: |
+        Patched LuaJIT core file. Keep changes minimal and upstream-compatible. Verify that host
+        closure interception cannot recurse and that stack/error paths stay balanced.
+
+    - path: "luajit/src/lj_load.c"
+      instructions: |
+        Patched LuaJIT core file. Verify the loadbuffer hook anchors cached `GCproto*` objects in
+        the registry, handles cache misses and errors correctly, and never returns a closure bound
+        to the wrong thread environment.
+
+    - path: "luajit/src/lj_state.c"
+      instructions: |
+        Patched LuaJIT core file. Verify allocator redirection still honors allocation failure
+        (`NULL` return), does not leak the host allocator userdata, and flushes caches on close.
+
+    - path: "luajit/src/ljamalg.c"
+      instructions: |
+        Amalgamated LuaJIT build unit. Ensure every custom source file is included exactly once and
+        that include order still yields the expected internal definitions.
+
+    - path: "benchmark/**/*.c"
+      instructions: |
+        This is a Win32 benchmark/equivalence harness. Check for:
+        - Correct Win32 calling conventions, handle and memory cleanup, and no undefined behavior.
+        - Deterministic RNG seeding and identical workload ordering across the three runs.
+        - Fair timing methodology (no dead-code elimination, same inputs, warmup separated).
+        - Exit with a non-zero status if hashes or RNG call counts differ.
+
+    - path: "build.sh"
+      instructions: |
+        Build script must fail fast (`set -euo pipefail`), quote all paths, clean intermediates, and
+        never write outside the repository. Preserve the 32-bit Win32 target and the required
+        Lua 5.1.4 export set.
+
+    - path: "build_all.bat"
+      instructions: |
+        Build script must fail fast (`if errorlevel`), quote all paths, clean intermediates, and
+        never write outside the repository. Preserve the 32-bit Win32 target and the required
+        Lua 5.1.4 export set.
+
+    - path: "*.ps1"
+      instructions: |
+        PowerShell installer/profiler scripts. Verify parameter validation, safe defaults, backup
+        before overwrite, hash verification, and that no user-specific paths or secrets are logged.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Check GitHub Actions security and reliability: least-privilege `permissions`, no untrusted
+        event input interpolated into `run:` blocks, pinned action major versions, artifact paths
+        that exist, and release steps gated to version tags.
+
+  tools:
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    shellcheck:
+      enabled: true
+    clang:
+      enabled: true
+    cppcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+
+chat:
+  auto_reply: true
