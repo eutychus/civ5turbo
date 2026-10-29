@@ -5,8 +5,7 @@ set "ROOT_DIR=%~dp0"
 if "%ROOT_DIR:~-1%"=="\" set "ROOT_DIR=%ROOT_DIR:~0,-1%"
 
 REM Locate a 32-bit MSVC environment if cl.exe is not already configured for x86
-where cl.exe >nul 2>nul
-if errorlevel 1 (
+if /I not "%VSCMD_ARG_TGT_ARCH%"=="x86" (
     set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
     if exist "!VSWHERE!" (
         for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
@@ -17,8 +16,7 @@ if errorlevel 1 (
     )
 )
 
-where cl.exe >nul 2>nul
-if errorlevel 1 (
+if /I not "%VSCMD_ARG_TGT_ARCH%"=="x86" (
     if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars32.bat" (
         call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars32.bat"
     ) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" (
@@ -32,6 +30,11 @@ if errorlevel 1 (
         exit /b 1
     )
 )
+if /I not "%VSCMD_ARG_TGT_ARCH%"=="x86" (
+    echo [ERROR] Could not configure the x86 MSVC environment.
+    exit /b 1
+)
+where cl.exe >nul 2>nul
 if errorlevel 1 exit /b 1
 
 if not exist "%ROOT_DIR%\dist" mkdir "%ROOT_DIR%\dist"
@@ -62,5 +65,8 @@ if errorlevel 1 (
 del /Q civ5_bench_harness.obj >nul 2>nul
 copy /Y civ5_bench_harness.exe "%ROOT_DIR%\dist\civ5_bench_harness.exe" >nul
 popd
+
+powershell -NoProfile -Command "$files = 'lua51_Win32.dll','civ5_bench_harness.exe'; $lines = foreach ($f in $files) { $h = (Get-FileHash (Join-Path '%ROOT_DIR%\dist' $f) -Algorithm SHA256).Hash.ToLower(); $h + '  ' + $f }; Set-Content -Encoding ascii -Path '%ROOT_DIR%\dist\SHA256SUMS.txt' -Value $lines"
+if errorlevel 1 exit /b 1
 
 echo [+] BUILD SUCCESSFUL: "%ROOT_DIR%\dist\lua51_Win32.dll"

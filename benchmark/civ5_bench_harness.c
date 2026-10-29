@@ -277,6 +277,7 @@ static void civ5_register_host_extensions(lua_State *L)
 
 static uint64_t s_rng_state = 0xC1055EED12345678ULL;
 static uint64_t s_rng_calls = 0;
+static uint64_t s_suite_rng_calls = 0;
 static int s_map_w = 128;
 static int s_map_h = 80;
 static int s_wrap_x = 1;
@@ -292,6 +293,7 @@ static int mock_Map_Rand(lua_State *L)
 {
   lua_Integer limit = G.luaL_checkinteger(L, 1);
   s_rng_calls++;
+  s_suite_rng_calls++;
   s_rng_state = s_rng_state * 6364136223846793005ULL + 1442695040888963407ULL;
   if (limit <= 0) {
     G.lua_pushinteger(L, 0);
@@ -533,6 +535,7 @@ typedef struct BenchResult {
   double ms[NUM_WORKLOADS];
   uint64_t hash[NUM_WORKLOADS];
   uint64_t rng_calls;
+  uint64_t suite_rng_calls;
   uint64_t alloc_calls;
   double lua2c_ms;
   double luajit_trace_ms;
@@ -541,6 +544,30 @@ typedef struct BenchResult {
 static double qpc_ms(LARGE_INTEGER t0, LARGE_INTEGER t1, LARGE_INTEGER freq)
 {
   return (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart;
+}
+
+static int format_path(char *dst, size_t capacity, const char *dir, const char *suffix)
+{
+  int n = snprintf(dst, capacity, "%s%s", dir, suffix);
+  return n >= 0 && (size_t)n < capacity;
+}
+
+/* Return -1 on I/O failure, 1 for identical files, and 0 otherwise. */
+static int files_equal(const char *a, const char *b)
+{
+  FILE *fa = fopen(a, "rb"), *fb = fopen(b, "rb");
+  unsigned char ba[4096], bb[4096];
+  size_t na, nb;
+  int result = 1;
+  if (!fa || !fb) { if (fa) fclose(fa); if (fb) fclose(fb); return -1; }
+  do {
+    na = fread(ba, 1, sizeof(ba), fa);
+    nb = fread(bb, 1, sizeof(bb), fb);
+    if (na != nb || memcmp(ba, bb, na) != 0) { result = 0; break; }
+  } while (na == sizeof(ba));
+  if (ferror(fa) || ferror(fb)) result = -1;
+  fclose(fa); fclose(fb);
+  return result;
 }
 
 static int run_suite(const char *dll_path, const char *civ5_dir,
@@ -569,13 +596,17 @@ static int run_suite(const char *dll_path, const char *civ5_dir,
     return 0;
   }
 
-  sprintf(path_mmu,  "%s\\Assets\\DLC\\Expansion2\\Gameplay\\Lua\\MapmakerUtilities.lua", civ5_dir);
-  sprintf(path_asp,  "%s\\Assets\\DLC\\Expansion2\\Gameplay\\Lua\\AssignStartingPlots.lua", civ5_dir);
-  sprintf(path_fw,   "%s\\Assets\\Gameplay\\Lua\\FractalWorld.lua", civ5_dir);
-  sprintf(path_vec,  "%s\\Assets\\Gameplay\\Lua\\FLuaVector.lua", civ5_dir);
-  sprintf(path_mlf,  "%s\\Assets\\Gameplay\\Lua\\MultilayeredFractal.lua", civ5_dir);
-  sprintf(path_im,   "%s\\Assets\\UI\\InstanceManager.lua", civ5_dir);
-  sprintf(path_icon, "%s\\Assets\\UI\\IconSupport.lua", civ5_dir);
+  if (!format_path(path_mmu, sizeof(path_mmu), civ5_dir, "\\Assets\\DLC\\Expansion2\\Gameplay\\Lua\\MapmakerUtilities.lua") ||
+      !format_path(path_asp, sizeof(path_asp), civ5_dir, "\\Assets\\DLC\\Expansion2\\Gameplay\\Lua\\AssignStartingPlots.lua") ||
+      !format_path(path_fw, sizeof(path_fw), civ5_dir, "\\Assets\\Gameplay\\Lua\\FractalWorld.lua") ||
+      !format_path(path_vec, sizeof(path_vec), civ5_dir, "\\Assets\\Gameplay\\Lua\\FLuaVector.lua") ||
+      !format_path(path_mlf, sizeof(path_mlf), civ5_dir, "\\Assets\\Gameplay\\Lua\\MultilayeredFractal.lua") ||
+      !format_path(path_im, sizeof(path_im), civ5_dir, "\\Assets\\UI\\InstanceManager.lua") ||
+      !format_path(path_icon, sizeof(path_icon), civ5_dir, "\\Assets\\UI\\IconSupport.lua")) {
+    fprintf(stderr, "Civ 5 path too long\n");
+    FreeLibrary(hMod);
+    return 0;
+  }
 
   buf_mmu  = read_file_all(path_mmu,  &sz_mmu);
   buf_asp  = read_file_all(path_asp,  &sz_asp);
@@ -592,6 +623,7 @@ static int run_suite(const char *dll_path, const char *civ5_dir,
 
   memset(out, 0, sizeof(*out));
   s_alloc_calls = 0;
+  s_suite_rng_calls = 0;
 
   L = G.lua_newstate(civ5_host_alloc, NULL);
   civ5_register_host_extensions(L);
@@ -862,7 +894,7 @@ static int run_suite(const char *dll_path, const char *civ5_dir,
         G.lua_setfield(co, 1, k_whitelist[wi]);
       }
       G.lua_pushvalue(co, 1);
-      G.lua_setfenv(co, -2); /* set co->env = T */
+      G.lua_replace(co, LUA_GLOBALSINDEX); /* set co->env = T */
       /* env table T is at index 1 on co's stack */
 
       /* Load FLuaVector.lua, IconSupport.lua, InstanceManager.lua, MapmakerUtilities.lua, AssignStartingPlots.lua */
@@ -1187,6 +1219,7 @@ static int run_suite(const char *dll_path, const char *civ5_dir,
     lua_pop(L, 1);
   }
 
+  out->suite_rng_calls = s_suite_rng_calls;
   out->alloc_calls = s_alloc_calls;
   G.lua_close(L);
   FreeLibrary(hMod);
@@ -1229,6 +1262,7 @@ int main(int argc, char **argv)
   double total_vanilla = 0, total_dropin = 0, total_hybrid = 0;
   int all_match = 1;
   int i;
+  DWORD path_len;
   const char *w_names[NUM_WORKLOADS] = {
     "W1:  0-Based ipairs + math.clamp",
     "W2:  table.fill + table.count (Huge)",
@@ -1243,27 +1277,31 @@ int main(int argc, char **argv)
   };
 
   if (argc >= 2 && argv[1][0] != '\0') {
-    GetFullPathNameA(argv[1], MAX_PATH, exe_dir_dll, NULL);
+    path_len = GetFullPathNameA(argv[1], MAX_PATH, exe_dir_dll, NULL);
+    if (!path_len || path_len >= MAX_PATH) { fprintf(stderr, "Custom DLL path too long or invalid\n"); return 1; }
     custom_dll = exe_dir_dll;
   } else if (GetFileAttributesA("dist\\lua51_Win32.dll") != INVALID_FILE_ATTRIBUTES) {
-    GetFullPathNameA("dist\\lua51_Win32.dll", MAX_PATH, exe_dir_dll, NULL);
+    path_len = GetFullPathNameA("dist\\lua51_Win32.dll", MAX_PATH, exe_dir_dll, NULL);
+    if (!path_len || path_len >= MAX_PATH) return 1;
     custom_dll = exe_dir_dll;
   } else if (GetFileAttributesA("..\\dist\\lua51_Win32.dll") != INVALID_FILE_ATTRIBUTES) {
-    GetFullPathNameA("..\\dist\\lua51_Win32.dll", MAX_PATH, exe_dir_dll, NULL);
+    path_len = GetFullPathNameA("..\\dist\\lua51_Win32.dll", MAX_PATH, exe_dir_dll, NULL);
+    if (!path_len || path_len >= MAX_PATH) return 1;
     custom_dll = exe_dir_dll;
-  } else if (GetModuleFileNameA(NULL, exe_dir_dll, MAX_PATH) > 0) {
+  } else if ((path_len = GetModuleFileNameA(NULL, exe_dir_dll, MAX_PATH)) > 0 && path_len < MAX_PATH) {
     char candidate[MAX_PATH];
     char *slash = strrchr(exe_dir_dll, '\\');
     if (slash) {
       *slash = '\0';
-      sprintf(candidate, "%s\\lua51_Win32.dll", exe_dir_dll);
+      if (!format_path(candidate, sizeof(candidate), exe_dir_dll, "\\lua51_Win32.dll")) return 1;
       if (GetFileAttributesA(candidate) != INVALID_FILE_ATTRIBUTES) {
         strcpy(exe_dir_dll, candidate);
         custom_dll = exe_dir_dll;
       } else {
-        sprintf(candidate, "%s\\..\\dist\\lua51_Win32.dll", exe_dir_dll);
+        if (!format_path(candidate, sizeof(candidate), exe_dir_dll, "\\..\\dist\\lua51_Win32.dll")) return 1;
         if (GetFileAttributesA(candidate) != INVALID_FILE_ATTRIBUTES) {
-          GetFullPathNameA(candidate, MAX_PATH, exe_dir_dll, NULL);
+          path_len = GetFullPathNameA(candidate, MAX_PATH, exe_dir_dll, NULL);
+          if (!path_len || path_len >= MAX_PATH) return 1;
           custom_dll = exe_dir_dll;
         }
       }
@@ -1272,19 +1310,32 @@ int main(int argc, char **argv)
 
   if (argc >= 3 && argv[2][0] != '\0') {
     civ5_dir = argv[2];
-  } else if (GetEnvironmentVariableA("CIV5_DIR", env_civ5_dir, MAX_PATH) > 0) {
-    civ5_dir = env_civ5_dir;
+  } else {
+    path_len = GetEnvironmentVariableA("CIV5_DIR", env_civ5_dir, MAX_PATH);
+    if (path_len >= MAX_PATH) { fprintf(stderr, "CIV5_DIR is too long\n"); return 1; }
+    if (path_len > 0) civ5_dir = env_civ5_dir;
   }
 
-  sprintf(vanilla_bak1, "%s\\lua51_Win32.dll.vanilla.bak", civ5_dir);
-  sprintf(vanilla_bak2, "%s\\lua51_Win32.dll.vanilla_backup", civ5_dir);
-  sprintf(vanilla_main, "%s\\lua51_Win32.dll", civ5_dir);
+  if (!format_path(vanilla_bak1, sizeof(vanilla_bak1), civ5_dir, "\\lua51_Win32.dll.vanilla.bak") ||
+      !format_path(vanilla_bak2, sizeof(vanilla_bak2), civ5_dir, "\\lua51_Win32.dll.vanilla_backup") ||
+      !format_path(vanilla_main, sizeof(vanilla_main), civ5_dir, "\\lua51_Win32.dll")) {
+    fprintf(stderr, "Civ 5 path too long\n");
+    return 1;
+  }
   if (GetFileAttributesA(vanilla_bak1) != INVALID_FILE_ATTRIBUTES)
     vanilla_dll = vanilla_bak1;
   else if (GetFileAttributesA(vanilla_bak2) != INVALID_FILE_ATTRIBUTES)
     vanilla_dll = vanilla_bak2;
   else
     vanilla_dll = vanilla_main;
+
+  {
+    int same = files_equal(vanilla_dll, custom_dll);
+    if (same != 0) {
+      fprintf(stderr, same > 0 ? "Baseline and custom DLL are identical; a vanilla baseline is required.\n" : "Could not compare baseline and custom DLL files.\n");
+      return 1;
+    }
+  }
 
   setvbuf(stdout, NULL, _IONBF, 0);
   setvbuf(stderr, NULL, _IONBF, 0);
@@ -1328,6 +1379,12 @@ int main(int argc, char **argv)
            r_vanilla.ms[i] / r_hybrid_native.ms[i],
            r_luajit_dropin.ms[i] / r_hybrid_native.ms[i],
            eq ? "EXACT MATCH" : "MISMATCH!");
+  }
+  if (r_vanilla.suite_rng_calls != r_luajit_dropin.suite_rng_calls ||
+      r_vanilla.suite_rng_calls != r_hybrid_native.suite_rng_calls) {
+    fprintf(stderr, "Suite Map.Rand call counts differ: %llu / %llu / %llu\n",
+            r_vanilla.suite_rng_calls, r_luajit_dropin.suite_rng_calls, r_hybrid_native.suite_rng_calls);
+    all_match = 0;
   }
   printf("--------------------------------------------------------------------------------\n");
   printf("%-38s | %7.2fms | %7.2fms | %7.2fms | %7.2fx | %7.2fx | %s\n",

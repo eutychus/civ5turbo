@@ -134,7 +134,7 @@ cat "${DIST_DIR}/SHA256SUMS.txt"
 # Optional release archive packaging
 if [[ "${DO_PACKAGE}" -eq 1 ]]; then
   PKG_NAME="civ5turbo-win32.zip"
-  STAGE_DIR="$(mktemp -d)"
+  STAGE_DIR="$(mktemp -d "${DIST_DIR}/.stage.XXXXXXXX")"
   trap 'rm -rf "${STAGE_DIR}"' EXIT
 
   mkdir -p "${STAGE_DIR}/civ5turbo/scripts"
@@ -146,6 +146,7 @@ if [[ "${DO_PACKAGE}" -eq 1 ]]; then
   cp -f "${ROOT_DIR}/install_playtest.ps1"     "${STAGE_DIR}/civ5turbo/scripts/"
   cp -f "${ROOT_DIR}/summarize_profile.ps1"    "${STAGE_DIR}/civ5turbo/scripts/"
 
+  rm -f "${DIST_DIR}/${PKG_NAME}"
   (
     cd "${STAGE_DIR}"
     zip -r -9 "${DIST_DIR}/${PKG_NAME}" civ5turbo >/dev/null

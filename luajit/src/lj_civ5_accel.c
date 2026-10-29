@@ -1948,6 +1948,13 @@ static const char k_civ5_clamp_lua[] =
   "  else return v end\n"
   "end\n";
 
+static int civ5_is_host_table(lua_State *L, int idx, const char *name)
+{
+  GCtab *g = tabref(mainthread(G(L))->env);
+  cTValue *tv = lj_tab_getstr(g, lj_str_newz(L, name));
+  return tv && tvistab(tv) && lua_topointer(L, idx) == (const void *)tabV(tv);
+}
+
 void lj_civ5_intercept_setfield(lua_State *L, int idx, const char *k)
 {
   if (!lj_civ5_accel_enabled() || !k)
@@ -1966,13 +1973,13 @@ void lj_civ5_intercept_setfield(lua_State *L, int idx, const char *k)
       lua_pop(L, 1);
     }
     civ5_ensure_helpers_installed(L);
-  } else if (strcmp(k, "fill") == 0 && funcV(L->top - 1)->c.f != lj_civ5_table_fill) {
+  } else if (strcmp(k, "fill") == 0 && civ5_is_host_table(L, idx, "table") && funcV(L->top - 1)->c.f != lj_civ5_table_fill) {
     L->top--;
     lua_pushcfunction(L, lj_civ5_table_fill);
-  } else if (strcmp(k, "count") == 0 && funcV(L->top - 1)->c.f != lj_civ5_table_count) {
+  } else if (strcmp(k, "count") == 0 && civ5_is_host_table(L, idx, "table") && funcV(L->top - 1)->c.f != lj_civ5_table_count) {
     L->top--;
     lua_pushcfunction(L, lj_civ5_table_count);
-  } else if (strcmp(k, "clamp") == 0) {
+  } else if (strcmp(k, "clamp") == 0 && civ5_is_host_table(L, idx, "math")) {
     if (luaL_loadbuffer(L, k_civ5_clamp_lua, sizeof(k_civ5_clamp_lua) - 1,
                         "=[civ5_clamp]") == 0 &&
         lua_pcall(L, 0, 1, 0) == 0) {
@@ -2310,9 +2317,9 @@ int lj_civ5_loadbuffer_hook(lua_State *L, const char *buf, size_t size,
 
   entry_key_str = lj_str_newz(L, key_buf);
   entry_tv = lj_tab_getstr(cache_tab, entry_key_str);
-  if (entry_tv && tvisfunc(entry_tv) && isluafunc(funcV(entry_tv))) {
+  if (entry_tv && tvisproto(entry_tv)) {
     /* Fast path: clone a fresh Lua closure from the cached GCproto* */
-    GCproto *pt = funcproto(funcV(entry_tv));
+    GCproto *pt = protoV(entry_tv);
     GCfunc *fn = lj_func_newL_empty(L, pt, tabref(L->env));
     setfuncV(L, L->top++, fn);
     lj_gc_check(L);
@@ -2364,16 +2371,24 @@ int lj_civ5_loadbuffer_hook(lua_State *L, const char *buf, size_t size,
 
   if (status == 0 && L->top > L->base &&
       tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1))) {
-    /* Cache the compiled closure in _REGISTRY.__civ5_proto_cache */
+    /* Keep at most 256 prototypes; clear the cache when it fills. */
     TValue *slot;
     reg_tab = tabV(registry(L));
     cache_key_str = lj_str_newlit(L, "__civ5_proto_cache");
     cache_tv = lj_tab_getstr(reg_tab, cache_key_str);
     if (cache_tv && tvistab(cache_tv)) {
       cache_tab = tabV(cache_tv);
+      cTValue *count_tv = lj_tab_getint(cache_tab, 1);
+      int32_t count = count_tv && tvisnumber(count_tv) ? numberVint(count_tv) : 0;
+      if (count >= 256) {
+        lj_tab_clear(cache_tab);
+        count = 0;
+      }
+      slot = lj_tab_setint(L, cache_tab, 1);
+      setintV(slot, count + 1);
       entry_key_str = lj_str_newz(L, key_buf);
       slot = lj_tab_setstr(L, cache_tab, entry_key_str);
-      copyTV(L, slot, L->top - 1);
+      setprotoV(L, slot, funcproto(funcV(L->top - 1)));
       lj_gc_barriert(L, cache_tab, slot);
     }
   }

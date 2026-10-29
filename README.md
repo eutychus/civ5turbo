@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CodeRabbit](https://img.shields.io/badge/CodeRabbit-enabled-ff6b35)](.coderabbit.yaml)
 
-A 100% ABI-compatible, bit-exact drop-in replacement for *Sid Meier's Civilization V*'s 32-bit `lua51_Win32.dll` (originally vanilla Lua 5.1.4).
+A drop-in replacement for *Sid Meier's Civilization V*'s 32-bit `lua51_Win32.dll` (originally vanilla Lua 5.1.4).
 
 This project combines **LuaJIT 2.1 (rolling)** with a custom **Civilization V Native C Accelerator & Bridge** ([`luajit/src/lj_civ5_accel.c`](luajit/src/lj_civ5_accel.c)) specifically engineered around the reverse-engineered Lua hosting architecture of `CivilizationV.exe`, `CivilizationV_DX11.exe`, `CvGameCore_Expansion2.dll`, and `CvGameDatabaseWin32Final Release.dll`.
 
@@ -13,7 +13,7 @@ This project combines **LuaJIT 2.1 (rolling)** with a custom **Civilization V Na
 ## Key Highlights
 
 - **4.73x Overall Lua Speedup (Up to 13.81x on Hot Workloads)**: Reduces the 10-workload Civilization V map-generation, gameplay, and UI benchmark suite from **736.34 ms** (vanilla Firaxis `lua51_Win32.dll`) to **155.59 ms**.
-- **100% Bit-Exact RNG & Output Equivalence**: Verified across 10 real Civilization V workloads using 64-bit FNV-1a state hashes and exact `Map.Rand` call-count tracking. Every map seed generates the exact same continents, rivers, starting plots, luxury regions, and resources as vanilla Lua 5.1.4.
+- **Benchmark Equivalence**: The harness compares output hashes and `Map.Rand` call counts across 10 selected Civilization V workloads, including a shuffle with a fixed RNG seed. It does not compare complete maps across all seeds.
 - **Zero Original Proprietary Code**: Built entirely from clean-room C and LuaJIT 2.1 (MIT licensed). Contains zero bytes of Firaxis source code or assets.
 - **Eliminates Host `HeapAlloc` Contention**: Redirects `lua_newstate` away from Civilization V's `HeapAlloc + HeapSize + memcpy + HeapFree` wrapper to LuaJIT's internal `lj_alloc_f` slab allocator (**831,521 -> 0** Win32 heap calls in the benchmark suite).
 - **Eliminates LuaJIT `NYI` Trace Aborts**: Intercepts Firaxis's custom C closures registered into every Lua state (`0-based ipairs`, `table.fill`, `table.count`, `math.clamp`) and replaces them with JIT-traceable closures and direct internal `GCtab` array operations.

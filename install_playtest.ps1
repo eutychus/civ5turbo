@@ -7,7 +7,11 @@ param(
 $ErrorActionPreference = "Stop"
 $TargetDll = Join-Path $Civ5Dir "lua51_Win32.dll"
 $BackupDll = Join-Path $Civ5Dir "lua51_Win32.dll.vanilla.bak"
-$BuiltDll  = Join-Path $PSScriptRoot "dist\lua51_Win32.dll"
+$BuildDir = Join-Path $PSScriptRoot "dist"
+if (-not (Test-Path (Join-Path $BuildDir "lua51_Win32.dll"))) {
+    $BuildDir = Split-Path $PSScriptRoot -Parent
+}
+$BuiltDll = Join-Path $BuildDir "lua51_Win32.dll"
 
 $VanillaSha256 = "F58CEFFEB317E42B7691D823B0DB4DA63DA0B988D2B381CCEC9C3C18A58C0E35"
 
@@ -32,10 +36,26 @@ switch ($Action) {
     }
     "Install" {
         $currentHash = (Get-FileHash $TargetDll -Algorithm SHA256).Hash
-        if ($currentHash -eq $VanillaSha256 -and -not (Test-Path $BackupDll)) {
-            Copy-Item -Path $TargetDll -Destination $BackupDll -Force
-            Write-Host "Backed up vanilla lua51_Win32.dll -> $BackupDll" -ForegroundColor Cyan
+        $builtHash = (Get-FileHash $BuiltDll -Algorithm SHA256).Hash
+        $sums = Join-Path $BuildDir "SHA256SUMS.txt"
+        if (-not (Test-Path $sums)) { throw "Checksum file not found: $sums" }
+        $entries = @(Get-Content $sums | Where-Object { $_ -match '^([a-fA-F0-9]{64})\s+[*]?lua51_Win32\.dll$' })
+        if ($entries.Count -ne 1 -or $entries[0] -notmatch '^([a-fA-F0-9]{64})\s+[*]?lua51_Win32\.dll$' -or $Matches[1] -ne $builtHash) {
+            throw "Missing, ambiguous, or mismatched DLL checksum in $sums"
         }
+        if ($currentHash -eq $builtHash) {
+            Write-Host "The requested DLL is already installed."
+            break
+        }
+        if (-not (Test-Path $BackupDll)) {
+            $backup = $BackupDll
+        } else {
+            do {
+                $backup = "$TargetDll.$([guid]::NewGuid().ToString('N')).bak"
+            } while (Test-Path $backup)
+        }
+        Copy-Item -Path $TargetDll -Destination $backup
+        Write-Host "Backed up existing DLL -> $backup" -ForegroundColor Cyan
         Copy-Item -Path $BuiltDll -Destination $TargetDll -Force
         Write-Host "Installed Hybrid LuaJIT 2.1 + Civ 5 Native C Accelerator -> $TargetDll" -ForegroundColor Green
     }
@@ -44,6 +64,6 @@ switch ($Action) {
             Write-Error "Backup file not found at: $BackupDll"
         }
         Copy-Item -Path $BackupDll -Destination $TargetDll -Force
-        Write-Host "Restored vanilla Firaxis lua51_Win32.dll from backup." -ForegroundColor Cyan
+        Write-Host "Restored lua51_Win32.dll from backup." -ForegroundColor Cyan
     }
 }
