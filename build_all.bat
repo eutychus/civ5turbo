@@ -4,7 +4,19 @@ setlocal enabledelayedexpansion
 set "ROOT_DIR=%~dp0"
 if "%ROOT_DIR:~-1%"=="\" set "ROOT_DIR=%ROOT_DIR:~0,-1%"
 
-REM Locate 32-bit MSVC environment if cl.exe is not already configured for x86
+REM Locate a 32-bit MSVC environment if cl.exe is not already configured for x86
+where cl.exe >nul 2>nul
+if errorlevel 1 (
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if exist "!VSWHERE!" (
+        for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+            if exist "%%i\VC\Auxiliary\Build\vcvars32.bat" (
+                call "%%i\VC\Auxiliary\Build\vcvars32.bat"
+            )
+        )
+    )
+)
+
 where cl.exe >nul 2>nul
 if errorlevel 1 (
     if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars32.bat" (

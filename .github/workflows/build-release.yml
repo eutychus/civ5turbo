@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install 32-bit host and MinGW-w64 cross-compiler
         run: |
@@ -54,7 +54,7 @@ jobs:
           echo "All required Lua 5.1.4 / LuaJIT exports are present."
 
       - name: Upload Linux cross-build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: civ5turbo-linux-mingw
           if-no-files-found: error
@@ -71,7 +71,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build with MSVC
         shell: cmd
@@ -93,7 +93,7 @@ jobs:
           Get-Content "dist/SHA256SUMS.txt"
 
       - name: Upload Windows MSVC artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: civ5turbo-windows-msvc
           if-no-files-found: error
@@ -113,7 +113,7 @@ jobs:
 
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -123,7 +123,7 @@ jobs:
           zip -r -9 ../../civ5turbo-win32-msvc.zip .
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |
