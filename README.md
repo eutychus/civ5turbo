@@ -18,7 +18,7 @@ This project combines **LuaJIT 2.1 (rolling)** with a custom **Civilization V Na
 - **Eliminates Host `HeapAlloc` Contention**: Redirects `lua_newstate` away from Civilization V's `HeapAlloc + HeapSize + memcpy + HeapFree` wrapper to LuaJIT's internal `lj_alloc_f` slab allocator (**831,521 -> 0** Win32 heap calls in the benchmark suite).
 - **Eliminates LuaJIT `NYI` Trace Aborts**: Intercepts Firaxis's custom C closures registered into every Lua state (`0-based ipairs`, `table.fill`, `table.count`, `math.clamp`) and replaces them with JIT-traceable closures and direct internal `GCtab` array operations.
 - **Cross-Thread `GCproto` Bytecode Cache**: Caches compiled Lua function prototypes (`GCproto*`) in `LUA_REGISTRYINDEX` across Civilization V's **186–263+ `lua_newthread` UI/gameplay contexts**, eliminating redundant parsing of shared files (`IconSupport.lua`, `InstanceManager.lua`, `SupportFunctions.lua`, etc.).
-- **Linux Cross-Compilation & GitHub Actions CI**: Includes a single-command Linux MinGW-w64 cross-compile script ([`build.sh`](build.sh)), a Windows MSVC build script ([`build_all.bat`](build_all.bat)), and a dual-platform GitHub Actions workflow ([`.github/workflows/build-release.yml`](.github/workflows/build-release.yml)) that builds on every push/PR, verifies the PE export table, and publishes tagged releases. Pull requests are reviewed by CodeRabbit using [`.coderabbit.yaml`](.coderabbit.yaml).
+- **Linux Cross-Compilation & GitHub Actions CI**: Includes a single-command Linux MinGW-w64 cross-compile script ([`build.sh`](build.sh)), a Windows MSVC build script ([`build_all.bat`](build_all.bat)), and a dual-platform GitHub Actions workflow ([`.github/workflows/build-release.yml`](.github/workflows/build-release.yml)) that builds on every push/PR, verifies the PE export table, and publishes releases for pushes to main and version tags. Pull requests are reviewed by CodeRabbit using [`.coderabbit.yaml`](.coderabbit.yaml).
 
 ---
 
@@ -29,7 +29,7 @@ civ5turbo/
 ├── .coderabbit.yaml               # CodeRabbit review configuration
 ├── .github/
 │   └── workflows/
-│       └── build-release.yml      # CI: Linux MinGW + Windows MSVC builds, tag releases
+│       └── build-release.yml      # CI: Linux MinGW + Windows MSVC builds and releases
 ├── benchmark/
 │   └── civ5_bench_harness.c       # Standalone Win32 equivalence & performance benchmark harness
 ├── dist/                          # Build output (generated, not committed)
@@ -211,10 +211,10 @@ Build outputs are placed in `dist/`:
 ### Option 2: Automated GitHub Actions CI / Release Workflow
 
 This repository includes [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml):
-- **On every `push` or `pull_request`**: Builds on two runners in parallel:
+- **On pushes to `main`, version tags, and pull requests targeting `main`**: Builds on two runners in parallel:
   - `ubuntu-latest` installs `gcc-multilib` and `gcc-mingw-w64-i686`, runs `./build.sh --amalg --package`, and verifies the PE export table.
   - `windows-latest` runs `build_all.bat` with MSVC x86 and generates SHA-256 checksums.
-- **On pushing a version tag (`v*`, e.g. `git tag v1.0.0 && git push origin v1.0.0`)**: Automatically creates a GitHub Release with generated release notes and attaches `civ5turbo-win32.zip`, `lua51_Win32.dll`, `SHA256SUMS.txt`, and the MSVC-built bundle.
+- **On a push to `main`**, including a merged pull request, the workflow creates a GitHub Release tagged `build-<commit SHA>`. Pushing a version tag (`v*`, e.g. `git tag v1.0.0 && git push origin v1.0.0`) also creates a release using that tag. Releases include generated notes, the MinGW DLL and benchmark executable, checksums, the complete MinGW bundle, and the MSVC-built bundle. Both builds must succeed before publication.
 - **Pull request review**: [CodeRabbit](https://www.coderabbit.ai/) reviews every non-draft PR using [`.coderabbit.yaml`](.coderabbit.yaml). Review scope is an explicit first-party allowlist: vendored LuaJIT source, docs, dynasm, and host tools are excluded, while only the seven Civ 5 integration files inside `luajit/` are eligible. The config also adds path-specific guidance for those patches, the benchmark harness, build/install scripts, and workflows.
 
 > **Maintainers:** CodeRabbit reviews start after the [CodeRabbit GitHub App](https://github.com/apps/coderabbitai/installations/new) is installed on the repository. The YAML config alone does not install the app.
